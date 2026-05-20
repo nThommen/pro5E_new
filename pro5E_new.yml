@@ -1,0 +1,57 @@
+name: pro5E_new
+channels:
+  - conda-forge
+dependencies:
+  # Core Python
+  - python=3.12.11
+  
+  # Numerische Basis (gleich wie dein stabiles Environment)
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - dask=2024.6.2
+  - distributed=2024.6.2
+  - scipy=1.13.1
+  
+  # Geo-Pakete (gleich wie dein stabiles Environment)
+  - geopandas=1.0.1
+  - shapely=2.1.1
+  - pyproj=3.7.1
+  - fiona=1.10.1
+  - geojson=3.1.0
+  - contextily=1.7.0
+  
+  # Energy & Grid (pandapower wird über pip installiert)
+  - pvlib=0.11.1
+  - networkx=3.3
+  
+  # Plotting
+  - matplotlib-base=3.9.2
+  - plotly=5.22.0
+  - seaborn=0.13.2
+  
+  # Excel & Data
+  - openpyxl=3.1.5
+  - xlsxwriter=3.1.1
+  - pyyaml=6.0.1
+  - fsspec=2024.6.1
+  
+  # Jupyter & Development
+  - ipykernel=6.28.0
+  - jupyterlab=4.0.11
+  - nbformat=5.9.2
+  
+  # OSM & Routing
+  - osmnx=1.9.3
+  
+  # Utils
+  - psutil=5.9.7
+  - tqdm=4.66.5
+  
+  # pip (für pip-Pakete)
+  - pip
+  
+  # pip packages
+  - pip:
+    - pandapower==2.14.8
+#    - geojson==3.1.0
+    - osrm==0.11.3
