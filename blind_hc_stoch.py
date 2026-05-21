@@ -1,3 +1,4 @@
+#%% Imports
 import pandas as pd
 import pandapower as pp
 import matplotlib.pyplot as plt
@@ -6,6 +7,7 @@ import seaborn as sns
 from pandapower.plotting.plotly import pf_res_plotly
 from numpy.random import default_rng
 
+#%% Functions
 # Load a desired network (simbench for now)
 def load_network():
     net = pp.from_excel('1055-1_0_4_grid.xlsx')
@@ -41,6 +43,7 @@ def check_violations(net, max_voltage, max_line_loading, max_transformer_loading
     else:        return (False, None)
 
 
+#%% Params
 # Set the boundary conditions for the optimization problem and the max network parameters
 rng = default_rng(seed=42)  # For reproducibility
 max_voltage = 1.03 # Maximum bus voltage in p.u.
@@ -55,6 +58,7 @@ iterations = 5
 # Set up pandas dataframe to store the results
 results = pd.DataFrame(columns=['Iteration', 'Installed PV', 'Installed EV', 'Violation Type'])
 
+#%% Execution and Plot
 # Distribute the PV systems randomly in the network for each year of the planning horizon and run power flow calculations
 for j in range(iterations):
         net = load_network()
@@ -68,8 +72,8 @@ for j in range(iterations):
         for bus in random_buses:
             pp.create_sgen(net, bus, p_mw=pv_size, q_mvar=0.0)
             installed_pv += pv_size
-            pp.create_load(net, bus, p_mw=ev_size, q_mvar=0.0)
-            installed_ev += ev_size
+            #pp.create_load(net, bus, p_mw=ev_size, q_mvar=0.0)
+            #installed_ev += ev_size
             violation, reason = check_violations(net, max_voltage, max_line_loading, max_transformer_loading)
             if violation:
                 print(f"Violation in iteration {j + 1} at bus {bus}: {reason}")
