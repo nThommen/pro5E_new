@@ -88,9 +88,9 @@ while True:
     gen_capacities.append(installed_pv)
 
 fig, ax1 = plt.subplots()
-ax1.plot(load_capacities, min_voltages, color='b', label='Max Voltage')
+ax1.scatter(load_capacities, min_voltages, color='b', label='Max Voltage')
 ax2 = ax1.twinx()
-ax2.plot(load_capacities, loadings, color='r', label='Max Loading')
+ax2.scatter(load_capacities, loadings, color='r', label='Max Loading')
 plt.legend()
 plt.title("Grid Load-Stress Evolution")
 plt.show()
