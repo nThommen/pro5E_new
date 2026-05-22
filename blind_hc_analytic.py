@@ -13,54 +13,75 @@ def load_network():
     net = pp.from_excel('1055-1_0_4_grid.xlsx')
     return net
 
-def check_violations(net, max_voltage, max_line_loading, max_transformer_loading):
-    pp.runpp(net)
+def check_violations(net, max_voltage, min_voltage, max_line_loading, max_transformer_loading):
+    try:
+        pp.runpp(net)
+    except:
+        return True, "No Convergence", None
     if net.res_line.loading_percent.max() > max_line_loading * 100:
-        return (True, "Line Overloading")
+        return True, "Line Overloading", net.line.index[net.res_line.loading_percent.idxmax()]
     elif net.res_trafo.loading_percent.max() > max_transformer_loading * 100:
-        return (True, "Transformer Overloading")
+        return True, "Transformer Overloading", net.trafo.index[net.res_trafo.loading_percent.idxmax()]
     elif net.res_bus.vm_pu.max() > max_voltage:
-        return (True, "Voltage Violation")
+        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmax()]
     elif net.res_bus.vm_pu.min() < min_voltage:
-        return (True, "Voltage Violation")
-    else:        return (False, None)
+        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmin()]
+    else:
+        return False, None, None
 
-#%% Main
+#%% Params and Loop
 
-pv_size = 0.001 # Size of PV systems in MW
-ev_size = 0.001 # Size of EVs in MW
-hp_size = 0.001 # Size of heat pumps in MW
+pv_size = 1e-4 # Size of PV systems in MW
+ev_size = 1e-4 # Size of EVs in MW
 
-max_voltage = 1.03 # Maximum bus voltage in p.u.
-min_voltage = 0.90
-max_line_loading = 1.0 # Maximum line loading in p.u.
-max_transformer_loading = 1.0 # Maximum transformer loading in p.u.
+max_voltage = 5.10 # Maximum bus voltage in p.u.
+min_voltage = 0.90 # Minimum bus voltage in p.u.
+max_line_loading = 5.0 # Maximum line loading in p.u.
+max_transformer_loading = 0.2 # Maximum transformer loading in p.u.
 
+voltages = []
+loadings = []
+capacities = []
+
+# Initialize the network with no PV or EV systems
 net = load_network()
-lv_bus = net.trafo.at[0, 'lv_bus'] # Get the low voltage bus of the transformer
-print("Low voltage bus: ", lv_bus)
 
-n_of_branches = net.bus.zone.nunique() - 1 # Number of branches in the network
-outgoing_lines = net.line[net.line['from_bus'] == lv_bus]
-num_branches = len(outgoing_lines)
-print("Number of branches: ", num_branches)
-
+# Exclude the external grid from the optimization
+busses_to_test = net.bus.index[~net.bus.index.isin(net.ext_grid.bus)]
+busses_to_exclude = net.bus.index[net.bus.index.isin(net.ext_grid.bus)]
+net.bus.loc[busses_to_exclude, "vm_pu"] = 1.02
+for bus in net.bus.index:
+    pp.create_sgen(net, bus, p_mw=0.0, q_mvar=0.0)
+    pp.create_load(net, bus, p_mw=0.0, q_mvar=0.0)
 installed_pv = 0
 installed_ev = 0
-only_one_bus = [4]
-pv_counter = 0
+pp.runpp(net)
+pp.plotting.pf_res_plotly(net)
+
 
 while True:
-    violated, reason = check_violations(net, max_voltage, max_line_loading, max_transformer_loading)
+    violated, reason, index = check_violations(net, max_voltage, min_voltage, max_line_loading, max_transformer_loading)
     if violated:
-        print("Violation detected: ", reason)
+        print(f"Violation detected: {reason} at index {index}")
         break
-    for bus in net.bus.index:
-        #pp.create_sgen(net, bus, p_mw=pv_size, q_mvar=0.0)
-        pp.create_load(net, bus, p_mw=hp_size, q_mvar=0.0)
-        #installed_pv += pv_size
-        installed_ev += hp_size
+    # Update all buses in the test set simultaneously for a uniform growth baseline
+    net.sgen.loc[net.sgen.bus.isin(busses_to_test), "p_mw"] += pv_size
+    # net.load.loc[net.load.bus.isin(busses_to_test), "p_mw"] += ev_size
 
+    installed_pv += pv_size * len(busses_to_test)
+    # installed_ev += ev_size * len(busses_to_test)
+
+    voltages.append(net.res_bus.vm_pu.max())
+    loadings.append(net.res_line.loading_percent.max())
+    capacities.append(installed_pv)
+
+fig, ax1 = plt.subplots()
+ax1.plot(capacities, voltages, color='b', label='Max Voltage')
+ax2 = ax1.twinx()
+ax2.plot(capacities, loadings, color='r', label='Max Loading')
+plt.legend()
+plt.title("Grid Stress Evolution")
+plt.show()
 
 print("Installed PV capacity: ", installed_pv, " MW")
 print("Installed EV capacity: ", installed_ev, " MW")
