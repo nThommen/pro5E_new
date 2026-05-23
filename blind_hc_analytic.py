@@ -100,3 +100,4 @@ print("Installed EV capacity: ", installed_ev, " MW")
 print("Trafo loading: ", net.res_trafo.loading_percent.max(), "%")
 pp.plotting.pf_res_plotly(net, auto_open=False)
 #pp.plotting.simple_plot(net, respect_switches=True, plot_sgens=True, plot_loads=True)
+
