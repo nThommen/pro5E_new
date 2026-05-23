@@ -142,6 +142,7 @@ def check_violations(net,
     if net.res_line.loading_percent.max() > max_line_loading * 100:
         return True, "Line Overloading", net.line.index[net.res_line.loading_percent.idxmax()]
 
+
     elif net.res_trafo.loading_percent.max() > max_transformer_loading * 100:
         return True, "Transformer Overloading", net.trafo.index[net.res_trafo.loading_percent.idxmax()]
 
@@ -162,14 +163,14 @@ loadage = False
 
 rng = default_rng(seed=42)
 
-n_monte_carlo = 100 # Number of Monte Carlo runs
+n_monte_carlo = 1000 # Number of Monte Carlo runs
 tolerance = 0.01 # Tolerance for bisection search
 max_iterations = 20 # Maximum number of iterations for bisection search
 
 # Limits for the network
 max_voltage = 1.10
 min_voltage = 0.90
-max_line_loading = 0.8
+max_line_loading = 1.0
 max_transformer_loading = 0.8
 
 # Size of the PV and EV systemy for each bus they're installed on
@@ -181,6 +182,8 @@ hosting_capacities = []
 
 base_net = load_network(generation=generation)
 candidate_buses = get_candidate_buses(base_net)
+
+
 
 for mc_run in range(n_monte_carlo):
     selected_buses = rng.permutation(candidate_buses)
@@ -201,7 +204,7 @@ for mc_run in range(n_monte_carlo):
 
     hosting_capacities.append({
         "mc_run": mc_run,
-        "hosting_capacity_penetration": hosting_capacity,
+        "hosting_capacity": hosting_capacity,
     })
 
     for record in records:
@@ -214,4 +217,56 @@ hosting_capacity_results = pd.DataFrame(hosting_capacities)
 results.to_csv("monte_carlo_violation_results.csv", index=False)
 hosting_capacity_results.to_csv("monte_carlo_hosting_capacity.csv", index=False)
 
-# Plot penetration on x-axis vs
+
+# Plot penetration on x-axis vs violation type
+plt.figure(figsize=(10, 6))
+sns.scatterplot(
+    data=results,
+    x="penetration",
+    y="installed_pv" if generation else "installed_ev",
+    hue="reason",
+    alpha=0.6
+)
+plt.xlabel("Penetration")
+plt.ylabel("Installed PV Capacity [MW]" if generation else "Installed EV Capacity [MW]")
+plt.title("Installed PV Capacity and Violations" if generation else "Installed EV Capacity and Violations")
+plt.grid(True)
+plt.show()
+
+# Plot violation probability vs penetration
+results["penetration_bin"] = pd.cut(
+    results["penetration"],
+    bins=20,
+    include_lowest=True
+)
+
+violation_probability = (
+    results.groupby("penetration_bin")["violation"]
+    .mean()
+    .reset_index()
+)
+
+violation_probability["penetration_mid"] = violation_probability["penetration_bin"].apply(
+    lambda interval: interval.mid
+)
+
+plt.figure(figsize=(10, 6))
+sns.lineplot(
+    data=violation_probability,
+    x="penetration_mid",
+    y="violation",
+    marker="o"
+)
+plt.xlabel("Penetration")
+plt.ylabel("Violation Probability")
+plt.title("Violation Probability as Function of Penetration")
+plt.grid(True)
+plt.show()
+
+#%% Boxplot of hosting capacities
+plt.figure(figsize=(5, 10))
+sns.boxplot(data=hosting_capacity_results, y="hosting_capacity", color="darkgreen")
+plt.ylabel("Hosting Capacity [MW]")
+plt.title("Hosting Capacity Distribution")
+plt.grid(True)
+plt.show()
