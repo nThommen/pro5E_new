@@ -163,18 +163,14 @@ loadage = False
 
 rng = default_rng(seed=42)
 
-n_monte_carlo = 1000 # Number of Monte Carlo runs
-tolerance = 0.01 # Tolerance for bisection search
-max_iterations = 20 # Maximum number of iterations for bisection search
-
 # Limits for the network
-max_voltage = 1.10
-min_voltage = 0.90
+max_voltage = 1.03 #Applicable for generation of pv panels
+min_voltage = 0.97
 max_line_loading = 1.0
 max_transformer_loading = 0.8
 
 # Size of the PV and EV systemy for each bus they're installed on
-pv_size = 0.035
+pv_size = 0.010
 ev_size = 0.010
 
 all_records = []
@@ -184,6 +180,10 @@ base_net = load_network(generation=generation)
 candidate_buses = get_candidate_buses(base_net)
 
 
+
+n_monte_carlo = 100 # Number of Monte Carlo runs
+tolerance = 0.01*pv_size/len(candidate_buses) # Tolerance for bisection search depending on pv and grid size
+max_iterations = 20 # Maximum number of iterations for bisection search
 
 for mc_run in range(n_monte_carlo):
     selected_buses = rng.permutation(candidate_buses)
