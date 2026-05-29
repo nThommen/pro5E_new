@@ -12,7 +12,10 @@ from blind_hc_analytic import generation
 #%% Functions
 # Load a desired network and set each bus-load to zero
 def load_network(generation):
-    net = pp.from_excel('1055-1_0_4_grid.xlsx')
+    #net = pp.from_excel('Grids/Jura-Urban/2553-1_0_5_grid.xlsx')
+    net = pp.from_excel('Grids/Jura-Periurban/2472-1_0_4_grid.xlsx')
+    #net = pp.from_excel('Grids/Alps_Rural/1001-1_0_3_grid.xlsx')
+    #net = pp.from_excel('Grids/Midlands-Periurban/1-1_0_7_grid.xlsx')
     if generation:
         net.load.p_mw = 0.0
         net.load.q_mvar = 0.0
@@ -43,11 +46,11 @@ def find_hosting_capacity_bisection(
     records = []
 
     for search_step in range(max_iterations):
-        mid = 0.5 * (low + high)
+        penetration = 0.5 * (low + high)
 
         result = test_penetration(
             selected_buses,
-            mid,
+            penetration,
             pv_size,
             ev_size,
             generation,
@@ -62,14 +65,15 @@ def find_hosting_capacity_bisection(
         records.append(result)
 
         if result["violation"]:
-            high = mid
+            high = penetration
         else:
-            low = mid
+            low = penetration
 
         if high - low <= tolerance:
             break
 
-    return low, records
+    hosting_capacity = low * (len(selected_buses) * pv_size)
+    return hosting_capacity, records
 
 def test_penetration(
         selected_busses,
@@ -182,11 +186,17 @@ candidate_buses = get_candidate_buses(base_net)
 
 
 n_monte_carlo = 100 # Number of Monte Carlo runs
-tolerance = 0.01*pv_size/len(candidate_buses) # Tolerance for bisection search depending on pv and grid size
+tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
+#alternative tolerance oriented by power (not yet tested):
+"""
+tolerance_mw = 0.01
+tolerance = tolerance_mw / (len(candidate_buses) * pv_size)
+"""
 max_iterations = 20 # Maximum number of iterations for bisection search
 
 for mc_run in range(n_monte_carlo):
     selected_buses = rng.permutation(candidate_buses)
+    print(f"MC Run {mc_run + 1} of {n_monte_carlo}")
 
     hosting_capacity, records = find_hosting_capacity_bisection(
         selected_buses,
