@@ -100,7 +100,7 @@ def test_penetration(
         loadage
     )
 
-    violation, reason, location = check_violations(net,
+    violation, reason, location, value = check_violations(net,
         max_voltage,
         min_voltage,
         max_line_loading,
@@ -113,7 +113,8 @@ def test_penetration(
         "installed_pv": installed_pv,
         "violation": violation,
         "reason": reason,
-        "location": location
+        "location": location,
+        "value": value
     }
 
 def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, generation, loadage):
@@ -141,22 +142,21 @@ def check_violations(net,
     try:
         pp.runpp(net)
     except:
-        return True, "No Convergence", None
+        return True, "No Convergence", None, None
 
     if net.res_line.loading_percent.max() > max_line_loading * 100:
-        return True, "Line Overloading", net.line.index[net.res_line.loading_percent.idxmax()]
-
+        return True, "Line Overloading", net.line.index[net.res_line.loading_percent.idxmax()], net.res_line.loading_percent.max()
 
     elif net.res_trafo.loading_percent.max() > max_transformer_loading * 100:
-        return True, "Transformer Overloading", net.trafo.index[net.res_trafo.loading_percent.idxmax()]
+        return True, "Transformer Overloading", net.trafo.index[net.res_trafo.loading_percent.idxmax()], net.res_trafo.loading_percent.max()
 
     elif net.res_bus.vm_pu.max() > max_voltage:
-        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmax()]
+        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmax()], net.res_bus.vm_pu.max()
 
     elif net.res_bus.vm_pu.min() < min_voltage:
-        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmin()]
+        return True, "Voltage Violation", net.bus.index[net.res_bus.vm_pu.idxmin()], net.res_bus.vm_pu.min()
 
-    return False, None, None
+    return False, None, None, None
 
 
 #%% Params and mc loop
@@ -185,7 +185,7 @@ candidate_buses = get_candidate_buses(base_net)
 
 
 
-n_monte_carlo = 100 # Number of Monte Carlo runs
+n_monte_carlo = 10 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
 #alternative tolerance oriented by power (not yet tested):
 """
