@@ -9,8 +9,7 @@ from pandapower.plotting.plotly import pf_res_plotly
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
-def load_network(generation):
-    #net = pp.from_excel('1055-1_0_4_grid.xlsx')
+def load_network():
     net = pn.create_kerber_dorfnetz()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
@@ -49,9 +48,9 @@ def check_violations(net, max_voltage, min_voltage, max_line_loading, max_transf
 pv_size = 1e-4 # Size of PV systems in MW
 ev_size = 1e-4 # Size of EVs in MW
 
-max_voltage = 1.10 # Maximum bus voltage in p.u.
+max_voltage = 1.03 # Maximum bus voltage in p.u.
 min_voltage = 0.90 # Minimum bus voltage in p.u.
-max_line_loading = 1.0 # Maximum line loading in p.u.
+max_line_loading = 0.85 # Maximum line loading in p.u.
 max_transformer_loading = 1.0 # Maximum transformer loading in p.u.
 
 max_voltages = []
@@ -61,8 +60,8 @@ load_capacities = []
 gen_capacities = []
 
 # Initialize the network with no PV or EV systems. For generation pass argument True, for no generation pass False
-generation = True
-net, busses_to_test = load_network(generation)
+generation = False
+net, busses_to_test = load_network()
 
 # Exclude the external grid from the optimization
 
@@ -83,8 +82,10 @@ while True:
         print(f"Violation detected: {reason} at index {index}")
         break
     # Update all buses in the test set simultaneously for a uniform growth baseline
-    net.sgen.loc[net.sgen.bus.isin(busses_to_test), "p_mw"] += pv_size
-    #net.load.loc[net.load.bus.isin(busses_to_test), "p_mw"] += ev_size
+    if generation:
+        net.sgen.loc[net.sgen.bus.isin(busses_to_test), "p_mw"] += pv_size
+    else:
+        net.load.loc[net.load.bus.isin(busses_to_test), "p_mw"] += ev_size
 
     installed_pv += pv_size * len(busses_to_test)
     installed_ev += ev_size * len(busses_to_test)
@@ -95,10 +96,8 @@ while True:
     load_capacities.append(installed_pv + installed_ev)
     gen_capacities.append(installed_pv)
 
-print("Installed PV capacity: ", installed_pv, " MW")
-print("Installed EV capacity: ", installed_ev, " MW")
-print("Trafo loading: ", net.res_trafo.loading_percent.max(), "%")
-
+print("Installed PV: ", installed_pv, "MW")
+print("Installed EV: ", installed_ev, "MW")
 
 print("Bus Results:")
 bus_results = net.bus[['name', 'zone', 'distance2ts']].merge(net.res_bus[['vm_pu', 'p_mw', 'q_mvar']], how='left', left_index=True, right_index=True)
@@ -123,7 +122,7 @@ if critical_trafo_results.empty:
 print(critical_trafo_results)
 
 # Ergebnisplot anzeigen
-pp.plotting.plotly.pf_res_plotly(net, auto_open=False)
+pp.plotting.plotly.pf_res_plotly(net)
 
 # Erstellen einer Farbpalette für die Zonen
 colors_buses = {'Trafostation':'grey', 'main':'grey',
