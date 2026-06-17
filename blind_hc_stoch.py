@@ -1,16 +1,17 @@
 #%% Imports
+import matplotlib
 import pandas as pd
-import pandapower as pp
+import pandapower as pp, pandapower.topology as top, pandapower.networks as pn
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 from numpy.random import default_rng
-
-from blind_hc_analytic import generation
-
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
+
+#Old version of load_network
+"""
 def load_network(generation):
     #net = pp.from_excel('Grids/Jura-Urban/2553-1_0_5_grid.xlsx')
     net = pp.from_excel('Grids/Jura-Periurban/2472-1_0_4_grid.xlsx')
@@ -22,18 +23,37 @@ def load_network(generation):
     net.sgen.p_mw = 0.0
     net.sgen.q_mvar = 0.0
     return net
-
-
-
+"""
+def load_network():
+    #net = pn.create_kerber_landnetz_kabel_2()
+    #net = pn.create_kerber_vorstadtnetz_kabel_1()
+    net = pn.kb_extrem_vorstadtnetz_1()
+    #net = pn.kb_extrem_dorfnetz()
+    net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
+    net.line['zone'] = net.line['name'].str.split('_').str[-2]
+    net.trafo['zone'] = 'Trafostation'
+    dist = top.calc_distance_to_bus(net, 1, respect_switches=True)
+    dist.name = 'distance2ts'
+    net.bus = net.bus.merge(dist.to_frame(), left_index=True, right_index=True, how='left')
+    return net
+#Old version of get_candidate_buses
+"""
 def get_candidate_buses(net):
     return net.bus.index[~net.bus.index.isin(net.ext_grid.bus)]
+"""
+
+def get_candidate_buses(net):
+    candidate_buses = []
+    for idx, row in net.bus.iterrows():
+        if 'loadbus' in row['name']:
+            candidate_buses.append(idx)
+    return candidate_buses
 
 def find_hosting_capacity_bisection(
     selected_buses,
     pv_size,
     ev_size,
     generation,
-    loadage,
     max_voltage,
     min_voltage,
     max_line_loading,
@@ -46,7 +66,7 @@ def find_hosting_capacity_bisection(
     records = []
 
     for search_step in range(max_iterations):
-        penetration = 0.5 * (low + high)
+        penetration = 0.5 * (low + high) #Test if this works
 
         result = test_penetration(
             selected_buses,
@@ -54,7 +74,6 @@ def find_hosting_capacity_bisection(
             pv_size,
             ev_size,
             generation,
-            loadage,
             max_voltage,
             min_voltage,
             max_line_loading,
@@ -72,7 +91,12 @@ def find_hosting_capacity_bisection(
         if high - low <= tolerance:
             break
 
-    hosting_capacity = low * (len(selected_buses) * pv_size)
+    if generation==True:
+        hosting_capacity = int(round(len(selected_buses) * penetration)) * pv_size
+    elif generation==False:
+        hosting_capacity = int(round(len(selected_buses) * penetration)) * ev_size
+    else:
+        hosting_capacity = 0.0
     return hosting_capacity, records
 
 def test_penetration(
@@ -81,14 +105,13 @@ def test_penetration(
         pv_size,
         ev_size,
         generation,
-        loadage,
         max_voltage,
         min_voltage,
         max_line_loading,
         max_transformer_loading,
 ):
 
-    net = load_network(generation)
+    net = load_network()
 
     installed_pv, installed_ev = apply_penetration(
         net,
@@ -96,8 +119,7 @@ def test_penetration(
         penetration,
         pv_size,
         ev_size,
-        generation,
-        loadage
+        generation
     )
 
     violation, reason, location, value = check_violations(net,
@@ -117,7 +139,7 @@ def test_penetration(
         "value": value
     }
 
-def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, generation, loadage):
+def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, generation):
     n_active = int(round(len(selected_busses) * penetration))
     active_busses = selected_busses[:n_active]
 
@@ -128,7 +150,7 @@ def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, gener
         if generation:
             pp.create_sgen(net, bus, p_mw=pv_size, q_mvar=0.0)
             installed_pv += pv_size
-        if loadage:
+        else:
             pp.create_load(net, bus, p_mw=ev_size, q_mvar=0.0)
             installed_ev += ev_size
 
@@ -161,29 +183,26 @@ def check_violations(net,
 
 #%% Params and mc loop
 
-# Set mode of simulation (generation, loadage, or both... or none if you're feeling funny)
+# Set mode of simulation (generation, or both... or none if you're feeling funny)
 generation = True
-loadage = False
 
 rng = default_rng(seed=42)
 
 # Limits for the network
 max_voltage = 1.03 #Applicable for generation of pv panels
-min_voltage = 0.97
+min_voltage = 0.90
 max_line_loading = 1.0
-max_transformer_loading = 0.8
+max_transformer_loading = 1.0
 
 # Size of the PV and EV systemy for each bus they're installed on
-pv_size = 0.010
-ev_size = 0.010
+pv_size = 0.010   # 10 kW PV
+ev_size = 0.011   # 11 kW EV charger
 
 all_records = []
 hosting_capacities = []
 
-base_net = load_network(generation=generation)
+base_net = load_network()
 candidate_buses = get_candidate_buses(base_net)
-
-
 
 n_monte_carlo = 10 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
@@ -203,7 +222,6 @@ for mc_run in range(n_monte_carlo):
         pv_size,
         ev_size,
         generation,
-        loadage,
         max_voltage,
         min_voltage,
         max_line_loading,
@@ -228,54 +246,19 @@ results.to_csv("monte_carlo_violation_results.csv", index=False)
 hosting_capacity_results.to_csv("monte_carlo_hosting_capacity.csv", index=False)
 
 
-# Plot penetration on x-axis vs violation type
-plt.figure(figsize=(10, 6))
-sns.scatterplot(
-    data=results,
-    x="penetration",
-    y="installed_pv" if generation else "installed_ev",
-    hue="reason",
-    alpha=0.6
-)
-plt.xlabel("Penetration")
-plt.ylabel("Installed PV Capacity [MW]" if generation else "Installed EV Capacity [MW]")
-plt.title("Installed PV Capacity and Violations" if generation else "Installed EV Capacity and Violations")
-plt.grid(True)
-plt.show()
+# Plot type of violation in cake diagram
+x = results["reason"].value_counts()
+labels = results["reason"].value_counts().index
+colors = matplotlib.color_sequences['Set2']
 
-# Plot violation probability vs penetration
-results["penetration_bin"] = pd.cut(
-    results["penetration"],
-    bins=20,
-    include_lowest=True
-)
+fig, ax = plt.subplots()
+ax.pie(x, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
 
-violation_probability = (
-    results.groupby("penetration_bin")["violation"]
-    .mean()
-    .reset_index()
-)
-
-violation_probability["penetration_mid"] = violation_probability["penetration_bin"].apply(
-    lambda interval: interval.mid
-)
-
-plt.figure(figsize=(10, 6))
-sns.lineplot(
-    data=violation_probability,
-    x="penetration_mid",
-    y="violation",
-    marker="o"
-)
-plt.xlabel("Penetration")
-plt.ylabel("Violation Probability")
-plt.title("Violation Probability as Function of Penetration")
-plt.grid(True)
-plt.show()
-
-#%% Boxplot of hosting capacities
+# Boxplot of hosting capacities
+# Manually set previously calculated hosting capacity from other script
 plt.figure(figsize=(5, 10))
-sns.boxplot(data=hosting_capacity_results, y="hosting_capacity", color="darkgreen")
+sns.color_palette("Set2")
+sns.boxplot(data=hosting_capacity_results, y="hosting_capacity")
 plt.ylabel("Hosting Capacity [MW]")
 plt.title("Hosting Capacity Distribution")
 plt.grid(True)
