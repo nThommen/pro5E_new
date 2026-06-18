@@ -5,9 +5,10 @@ import pandapower as pp, pandapower.topology as top, pandapower.networks as pn
 #%% Functions
 # Load a desired network and set each bus-load to zero
 def load_network():
+    net = pn.create_kerber_dorfnetz()
     #net = pn.create_kerber_landnetz_kabel_2()
     #net = pn.create_kerber_vorstadtnetz_kabel_1()
-    net = pn.kb_extrem_vorstadtnetz_1()
+    #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.kb_extrem_dorfnetz()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
@@ -80,8 +81,11 @@ while True:
 pp.runpp(net)
 pp.plotting.pf_res_plotly(net, auto_open=False)
 
-print("Installed PV: ", installed_pv-len(busses_to_test)*pv_size, "MW")
-print("Installed EV: ", installed_ev-len(busses_to_test)*ev_size, "MW")
+PV_hc = installed_pv-len(busses_to_test)*pv_size
+EV_hc = installed_ev-len(busses_to_test)*ev_size
+
+print("Installed PV: ", PV_hc, "MW")
+print("Installed EV: ", EV_hc, "MW")
 
 print("Bus Results:")
 bus_results = net.bus[['name', 'zone', 'distance2ts']].merge(net.res_bus[['vm_pu', 'p_mw', 'q_mvar']], how='left', left_index=True, right_index=True)

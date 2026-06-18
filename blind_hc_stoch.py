@@ -25,9 +25,10 @@ def load_network(generation):
     return net
 """
 def load_network():
+    net = pn.create_kerber_dorfnetz()
     #net = pn.create_kerber_landnetz_kabel_2()
     #net = pn.create_kerber_vorstadtnetz_kabel_1()
-    net = pn.kb_extrem_vorstadtnetz_1()
+    #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.kb_extrem_dorfnetz()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
@@ -61,12 +62,17 @@ def find_hosting_capacity_bisection(
     tolerance,
     max_iterations,
 ):
+    first_run = True
     low = 0.0
     high = 1.0
     records = []
 
     for search_step in range(max_iterations):
-        penetration = 0.5 * (low + high) #Test if this works
+        if first_run:
+            penetration = 1.0 * (low + high) #Test if this works
+            first_run = False
+        else:
+            penetration = 0.5 * (low + high)
 
         result = test_penetration(
             selected_buses,
@@ -183,6 +189,8 @@ def check_violations(net,
 
 #%% Params and mc loop
 
+from blind_hc_analytic import PV_hc, EV_hc
+
 # Set mode of simulation (generation, or both... or none if you're feeling funny)
 generation = True
 
@@ -195,8 +203,8 @@ max_line_loading = 1.0
 max_transformer_loading = 1.0
 
 # Size of the PV and EV systemy for each bus they're installed on
-pv_size = 0.010   # 10 kW PV
-ev_size = 0.011   # 11 kW EV charger
+pv_size = 0.030   # 30kW PV - change back to 10kW later
+ev_size = 0.011   # 11kW EV charger
 
 all_records = []
 hosting_capacities = []
@@ -204,7 +212,7 @@ hosting_capacities = []
 base_net = load_network()
 candidate_buses = get_candidate_buses(base_net)
 
-n_monte_carlo = 10 # Number of Monte Carlo runs
+n_monte_carlo = 1000 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
 #alternative tolerance oriented by power (not yet tested):
 """
@@ -256,10 +264,13 @@ ax.pie(x, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
 
 # Boxplot of hosting capacities
 # Manually set previously calculated hosting capacity from other script
+analytic_hc = 0.587 # Example value from blind_hc_analytic.py
 plt.figure(figsize=(5, 10))
 sns.color_palette("Set2")
 sns.boxplot(data=hosting_capacity_results, y="hosting_capacity")
+plt.axhline(y=analytic_hc, color='r', linestyle='--', label=f'Analytic HC ({analytic_hc} MW)')
 plt.ylabel("Hosting Capacity [MW]")
 plt.title("Hosting Capacity Distribution")
+plt.legend()
 plt.grid(True)
 plt.show()
