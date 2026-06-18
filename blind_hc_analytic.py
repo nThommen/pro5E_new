@@ -1,11 +1,6 @@
 #%% Imports
 import pandas as pd
 import pandapower as pp, pandapower.topology as top, pandapower.networks as pn
-import matplotlib.pyplot as plt
-import seaborn as sns
-import kaleido
-
-from pandapower.plotting.plotly import pf_res_plotly
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
