@@ -404,4 +404,4 @@ Thumbs.db
 *.html
 
 # results.csv generated for insight need not be committed
-results.csv
+*.csv

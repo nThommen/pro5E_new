@@ -5,22 +5,31 @@ import pandapower as pp, pandapower.topology as top, pandapower.networks as pn
 #%% Functions
 # Load a desired network and set each bus-load to zero
 def load_network():
-    net = pn.create_kerber_dorfnetz()
-    #net = pn.create_kerber_landnetz_kabel_2()
-    #net = pn.create_kerber_vorstadtnetz_kabel_1()
     #net = pn.kb_extrem_vorstadtnetz_1()
-    #net = pn.kb_extrem_dorfnetz()
+    #net = pn.create_kerber_landnetz_kabel_1()
+    net = pn.create_kerber_dorfnetz()
+    #net = pn.create_kerber_vorstadtnetz_kabel_1()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
     net.trafo['zone'] = 'Trafostation'
     dist = top.calc_distance_to_bus(net, 1, respect_switches=True)
     dist.name = 'distance2ts'
     net.bus = net.bus.merge(dist.to_frame(), left_index=True, right_index=True, how='left')
-    busses_to_test = []
+    buses_to_test = []
+
     for idx, row in net.bus.iterrows():
-        if 'loadbus' in row['name']:
-            busses_to_test.append(idx)
-    return net, busses_to_test
+        name = row.get("name")
+
+        if isinstance(name, str) and "loadbus" in name:
+            buses_to_test.append(idx)
+
+            loads_at_bus = net.load[net.load["bus"] == idx]
+            p_mw = loads_at_bus["p_mw"].sum()
+            q_mvar = loads_at_bus["q_mvar"].sum()
+
+            print("Wirkleistung am Bus ", idx, ": ", p_mw)
+            print("Blindleistung am Bus ", idx, ": ", q_mvar)
+    return net, buses_to_test
 
 
 def check_violations(net, max_voltage, min_voltage, max_line_loading, max_transformer_loading):
@@ -51,9 +60,9 @@ max_transformer_loading = 1.0 # Maximum transformer loading in p.u.
 
 # Initialize the network with no PV or EV systems. For generation pass argument True, for no generation pass False
 generation = True
-net, busses_to_test = load_network()
+net, buses_to_test = load_network()
 
-for bus in busses_to_test:
+for bus in buses_to_test:
     if generation:
         pp.create_sgen(net, bus, p_mw=0.0, q_mvar=0.0)
     else:
@@ -61,28 +70,31 @@ for bus in busses_to_test:
 
 installed_pv = 0
 installed_ev = 0
+run_nr = 0
 
 #pp.runpp(net)
 
 #%% Main Loop
 while True:
+    run_nr += 1
+    print(f"Run {run_nr}")
     violated, reason, index = check_violations(net, max_voltage, min_voltage, max_line_loading, max_transformer_loading)
     if violated:
         print(f"Violation detected: {reason} at index {index}")
         break
     # Update all buses in the test set simultaneously for a uniform growth baseline
     if generation:
-        net.sgen.loc[net.sgen.bus.isin(busses_to_test), "p_mw"] += pv_size
-        installed_pv += pv_size * len(busses_to_test)
+        net.sgen.loc[net.sgen.bus.isin(buses_to_test), "p_mw"] += pv_size
+        installed_pv += pv_size * len(buses_to_test)
     else:
-        net.load.loc[net.load.bus.isin(busses_to_test), "p_mw"] += ev_size
-        installed_ev += ev_size * len(busses_to_test)
+        net.load.loc[net.load.bus.isin(buses_to_test), "p_mw"] += ev_size
+        installed_ev += ev_size * len(buses_to_test)
 
 pp.runpp(net)
 pp.plotting.pf_res_plotly(net, auto_open=False)
 
-PV_hc = installed_pv-len(busses_to_test)*pv_size
-EV_hc = installed_ev-len(busses_to_test)*ev_size
+PV_hc = installed_pv - len(buses_to_test) * pv_size
+EV_hc = installed_ev - len(buses_to_test) * ev_size
 
 print("Installed PV: ", PV_hc, "MW")
 print("Installed EV: ", EV_hc, "MW")

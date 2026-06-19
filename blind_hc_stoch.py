@@ -25,11 +25,10 @@ def load_network(generation):
     return net
 """
 def load_network():
-    net = pn.create_kerber_dorfnetz()
-    #net = pn.create_kerber_landnetz_kabel_2()
-    #net = pn.create_kerber_vorstadtnetz_kabel_1()
     #net = pn.kb_extrem_vorstadtnetz_1()
-    #net = pn.kb_extrem_dorfnetz()
+    #net = pn.create_kerber_landnetz_kabel_1()
+    net = pn.create_kerber_dorfnetz()
+    #net = pn.create_kerber_vorstadtnetz_kabel_1()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
     net.trafo['zone'] = 'Trafostation'
@@ -66,10 +65,11 @@ def find_hosting_capacity_bisection(
     low = 0.0
     high = 1.0
     records = []
+    best_feasible_result = None
 
     for search_step in range(max_iterations):
         if first_run:
-            penetration = 1.0 * (low + high) #Test if this works
+            penetration = 1.0 * (low + high)
             first_run = False
         else:
             penetration = 0.5 * (low + high)
@@ -93,16 +93,20 @@ def find_hosting_capacity_bisection(
             high = penetration
         else:
             low = penetration
+            best_feasible_result = result
 
         if high - low <= tolerance:
             break
 
-    if generation==True:
-        hosting_capacity = int(round(len(selected_buses) * penetration)) * pv_size
-    elif generation==False:
-        hosting_capacity = int(round(len(selected_buses) * penetration)) * ev_size
+    if best_feasible_result is None:
+        hosting_capacity = 0.0
+    elif generation == True:
+        hosting_capacity = best_feasible_result["installed_pv"]
+    elif generation == False:
+        hosting_capacity = best_feasible_result["installed_ev"]
     else:
         hosting_capacity = 0.0
+
     return hosting_capacity, records
 
 def test_penetration(
@@ -148,6 +152,7 @@ def test_penetration(
 def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, generation):
     n_active = int(round(len(selected_busses) * penetration))
     active_busses = selected_busses[:n_active]
+    print(f"Active buses: {active_busses}")
 
     installed_pv = 0
     installed_ev = 0
@@ -212,7 +217,7 @@ hosting_capacities = []
 base_net = load_network()
 candidate_buses = get_candidate_buses(base_net)
 
-n_monte_carlo = 1000 # Number of Monte Carlo runs
+n_monte_carlo = 10 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
 #alternative tolerance oriented by power (not yet tested):
 """
@@ -254,23 +259,34 @@ results.to_csv("monte_carlo_violation_results.csv", index=False)
 hosting_capacity_results.to_csv("monte_carlo_hosting_capacity.csv", index=False)
 
 
-# Plot type of violation in cake diagram
+#%% Plot type of violation in cake diagram
 x = results["reason"].value_counts()
 labels = results["reason"].value_counts().index
-colors = matplotlib.color_sequences['Set2']
+if generation:
+    colors = matplotlib.color_sequences['Set2']
+else:
+    colors = matplotlib.color_sequences['tab20']
 
 fig, ax = plt.subplots()
 ax.pie(x, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
+plt.title('Violation Distribution')
+plt.savefig("violation_distr.png")
+plt.show()
 
 # Boxplot of hosting capacities
 # Manually set previously calculated hosting capacity from other script
-analytic_hc = 0.587 # Example value from blind_hc_analytic.py
+if generation:
+    analytic_hc = np.round(PV_hc, decimals=3) # Example value from blind_hc_analytic.py
+else:
+    analytic_hc = EV_hc
 plt.figure(figsize=(5, 10))
 sns.color_palette("Set2")
 sns.boxplot(data=hosting_capacity_results, y="hosting_capacity")
 plt.axhline(y=analytic_hc, color='r', linestyle='--', label=f'Analytic HC ({analytic_hc} MW)')
+#plt.ylim(0.2, 0.8) was only for the comparison of iteration numbers
 plt.ylabel("Hosting Capacity [MW]")
 plt.title("Hosting Capacity Distribution")
 plt.legend()
 plt.grid(True)
+plt.savefig("hc_distr.png")
 plt.show()
