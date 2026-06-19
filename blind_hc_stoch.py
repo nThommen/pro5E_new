@@ -243,10 +243,7 @@ PV_hc, EV_hc = calculate_analytic_hc(generation, step_size, max_voltage, min_vol
 
 x = results["reason"].value_counts()
 labels = results["reason"].value_counts().index
-if generation:
-    colors = matplotlib.color_sequences['Set2']
-else:
-    colors = matplotlib.color_sequences['tab20']
+colors = matplotlib.color_sequences['Set2']
 
 fig, ax = plt.subplots()
 ax.pie(x, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
