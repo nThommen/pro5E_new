@@ -7,23 +7,9 @@ import seaborn as sns
 import numpy as np
 from numpy.random import default_rng
 
+
 #%% Functions
 # Load a desired network and set each bus-load to zero
-
-#Old version of load_network
-"""
-def load_network(generation):
-    #net = pp.from_excel('Grids/Jura-Urban/2553-1_0_5_grid.xlsx')
-    net = pp.from_excel('Grids/Jura-Periurban/2472-1_0_4_grid.xlsx')
-    #net = pp.from_excel('Grids/Alps_Rural/1001-1_0_3_grid.xlsx')
-    #net = pp.from_excel('Grids/Midlands-Periurban/1-1_0_7_grid.xlsx')
-    if generation:
-        net.load.p_mw = 0.0
-        net.load.q_mvar = 0.0
-    net.sgen.p_mw = 0.0
-    net.sgen.q_mvar = 0.0
-    return net
-"""
 def load_network():
     #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.create_kerber_landnetz_kabel_1()
@@ -36,11 +22,6 @@ def load_network():
     dist.name = 'distance2ts'
     net.bus = net.bus.merge(dist.to_frame(), left_index=True, right_index=True, how='left')
     return net
-#Old version of get_candidate_buses
-"""
-def get_candidate_buses(net):
-    return net.bus.index[~net.bus.index.isin(net.ext_grid.bus)]
-"""
 
 def get_candidate_buses(net):
     candidate_buses = []
@@ -152,7 +133,8 @@ def test_penetration(
 def apply_penetration(net, selected_busses, penetration, pv_size, ev_size, generation):
     n_active = int(round(len(selected_busses) * penetration))
     active_busses = selected_busses[:n_active]
-    print(f"Active buses: {active_busses}")
+    #Debugging snipped to verify bisection
+    #print(f"Active buses: {active_busses}")
 
     installed_pv = 0
     installed_ev = 0
@@ -194,10 +176,8 @@ def check_violations(net,
 
 #%% Params and mc loop
 
-from blind_hc_analytic import PV_hc, EV_hc
-
 # Set mode of simulation (generation, or both... or none if you're feeling funny)
-generation = True
+generation = False
 
 rng = default_rng(seed=42)
 
@@ -217,13 +197,8 @@ hosting_capacities = []
 base_net = load_network()
 candidate_buses = get_candidate_buses(base_net)
 
-n_monte_carlo = 10 # Number of Monte Carlo runs
+n_monte_carlo = 100 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
-#alternative tolerance oriented by power (not yet tested):
-"""
-tolerance_mw = 0.01
-tolerance = tolerance_mw / (len(candidate_buses) * pv_size)
-"""
 max_iterations = 20 # Maximum number of iterations for bisection search
 
 for mc_run in range(n_monte_carlo):
@@ -259,7 +234,13 @@ results.to_csv("monte_carlo_violation_results.csv", index=False)
 hosting_capacity_results.to_csv("monte_carlo_hosting_capacity.csv", index=False)
 
 
+#%% Call analytic HC for comparison
+
+from blind_hc_analytic import calculate_analytic_hc, step_size
+PV_hc, EV_hc = calculate_analytic_hc(generation, step_size, max_voltage, min_voltage, max_line_loading, max_transformer_loading)
+
 #%% Plot type of violation in cake diagram
+
 x = results["reason"].value_counts()
 labels = results["reason"].value_counts().index
 if generation:
@@ -274,16 +255,18 @@ plt.savefig("violation_distr.png")
 plt.show()
 
 # Boxplot of hosting capacities
-# Manually set previously calculated hosting capacity from other script
+# Get previously calculated hosting capacity from other script
 if generation:
     analytic_hc = np.round(PV_hc, decimals=3) # Example value from blind_hc_analytic.py
+    color = ""
 else:
-    analytic_hc = EV_hc
+    analytic_hc = np.round(EV_hc, decimals=3)
+    color = "blue"
 plt.figure(figsize=(5, 10))
-sns.color_palette("Set2")
 sns.boxplot(data=hosting_capacity_results, y="hosting_capacity")
-plt.axhline(y=analytic_hc, color='r', linestyle='--', label=f'Analytic HC ({analytic_hc} MW)')
-#plt.ylim(0.2, 0.8) was only for the comparison of iteration numbers
+plt.axhline(y=analytic_hc, color='r', linestyle='--', label=f'Deterministic HC ({analytic_hc} MW)')
+#lim only needed for comparing iteration numbers, comment out for other sims
+plt.ylim(0.0, 0.1)
 plt.ylabel("Hosting Capacity [MW]")
 plt.title("Hosting Capacity Distribution")
 plt.legend()
