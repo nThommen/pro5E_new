@@ -9,22 +9,25 @@ from numpy.random import default_rng
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
-def load_network():
+def load_network(generation):
     #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.create_kerber_landnetz_kabel_1()
-    net = pn.create_kerber_dorfnetz()
-    #net = pn.create_kerber_vorstadtnetz_kabel_1()
+    #net = pn.create_kerber_dorfnetz()
+    net = pn.create_kerber_vorstadtnetz_kabel_1()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
     net.trafo['zone'] = 'Trafostation'
     dist = top.calc_distance_to_bus(net, 1, respect_switches=True)
     dist.name = 'distance2ts'
     net.bus = net.bus.merge(dist.to_frame(), left_index=True, right_index=True, how='left')
+    if generation:
+        net.load.scaling = 0.1
+    if not generation:
+        net.load.scaling = 0.8
     buses_to_test = []
 
     for idx, row in net.bus.iterrows():
         name = row.get("name")
-
         if isinstance(name, str) and "loadbus" in name:
             buses_to_test.append(idx)
 
@@ -54,21 +57,23 @@ def check_violations(net, max_voltage, min_voltage, max_line_loading, max_transf
         return False, None, None
 
 
-def calculate_analytic_hc(generation,
-                          step_size,
-                          max_voltage,
-                          min_voltage,
-                          max_line_loading,
-                          max_transformer_loading):
-    net, buses_to_test = load_network()
+def calculate_deterministic_hc(generation,
+                               step_size,
+                               max_voltage,
+                               min_voltage,
+                               max_line_loading,
+                               max_transformer_loading):
+    net, buses_to_test = load_network(generation)
     installed_pv = 0
     installed_ev = 0
+    run_nrs = 0
     for bus in buses_to_test:
         if generation:
             pp.create_sgen(net, bus, p_mw=0.0, q_mvar=0.0)
         else:
             pp.create_load(net, bus, p_mw=0.0, q_mvar=0.0)
     while True:
+        run_nrs += 1
         violated, reason, index = check_violations(net, max_voltage, min_voltage, max_line_loading,
                                                    max_transformer_loading)
         if violated:
@@ -83,11 +88,12 @@ def calculate_analytic_hc(generation,
             installed_ev += step_size * len(buses_to_test)
     PV_hc = installed_pv - len(buses_to_test) * step_size
     EV_hc = installed_ev - len(buses_to_test) * step_size
+    print("Number of runs: ", run_nrs)
 
     print("Bus Results:")
     bus_results = net.bus[['name', 'zone', 'distance2ts']].merge(net.res_bus[['vm_pu', 'p_mw', 'q_mvar']], how='left',
                                                                  left_index=True, right_index=True)
-    critical_bus_results = bus_results[(bus_results['vm_pu'] < 0.97) | (bus_results['vm_pu'] > 1.03)]
+    critical_bus_results = bus_results[(bus_results['vm_pu'] < 0.90) | (bus_results['vm_pu'] > 1.03)]
     if critical_bus_results.empty:
         critical_bus_results = 'no bus voltage violation'
     print(critical_bus_results)
@@ -95,7 +101,7 @@ def calculate_analytic_hc(generation,
     print("\nLine Results:")
     line_results = net.line[['name', 'zone']].merge(net.res_line[['p_from_mw', 'i_ka', 'loading_percent']], how='left',
                                                     left_index=True, right_index=True)
-    critical_line_results = line_results[line_results['loading_percent'] > 80]
+    critical_line_results = line_results[line_results['loading_percent'] > 100]
     if critical_line_results.empty:
         critical_line_results = 'no line overload'
     print(critical_line_results)
@@ -104,7 +110,7 @@ def calculate_analytic_hc(generation,
     trafo_results = net.trafo[['name', 'zone']].merge(net.res_trafo[['p_hv_mw', 'p_lv_mw', 'loading_percent']],
                                                       how='left', left_index=True, right_index=True)
     element_results = pd.concat([trafo_results, line_results], axis=0).reset_index(drop=True)
-    critical_trafo_results = trafo_results[trafo_results['loading_percent'] > 80]
+    critical_trafo_results = trafo_results[trafo_results['loading_percent'] > 100]
     if critical_trafo_results.empty:
         critical_trafo_results = 'no transformer overload'
     print(critical_trafo_results)
@@ -127,12 +133,12 @@ max_transformer_loading = 1.0 # Maximum transformer loading in p.u.
 # For generation pass argument True, for no generation pass False
 generation = False
 
-PV_hc, EV_hc = calculate_analytic_hc(generation,
-                                     step_size,
-                                     max_voltage,
-                                     min_voltage,
-                                     max_line_loading,
-                                     max_transformer_loading)
+PV_hc, EV_hc = calculate_deterministic_hc(generation,
+                                          step_size,
+                                          max_voltage,
+                                          min_voltage,
+                                          max_line_loading,
+                                          max_transformer_loading)
 
 print("Installed PV: ", PV_hc, "MW")
 print("Installed EV: ", EV_hc, "MW")

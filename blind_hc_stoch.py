@@ -10,17 +10,21 @@ from numpy.random import default_rng
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
-def load_network():
+def load_network(generation):
     #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.create_kerber_landnetz_kabel_1()
-    net = pn.create_kerber_dorfnetz()
-    #net = pn.create_kerber_vorstadtnetz_kabel_1()
+    #net = pn.create_kerber_dorfnetz()
+    net = pn.create_kerber_vorstadtnetz_kabel_1()
     net.bus['zone'] = net.bus['name'].str.split('_').str[-2]
     net.line['zone'] = net.line['name'].str.split('_').str[-2]
     net.trafo['zone'] = 'Trafostation'
     dist = top.calc_distance_to_bus(net, 1, respect_switches=True)
     dist.name = 'distance2ts'
     net.bus = net.bus.merge(dist.to_frame(), left_index=True, right_index=True, how='left')
+    if generation:
+        net.load.scaling = 0.1
+    if not generation:
+        net.load.scaling = 0.8
     return net
 
 def get_candidate_buses(net):
@@ -102,7 +106,7 @@ def test_penetration(
         max_transformer_loading,
 ):
 
-    net = load_network()
+    net = load_network(generation)
 
     installed_pv, installed_ev = apply_penetration(
         net,
@@ -188,16 +192,16 @@ max_line_loading = 1.0
 max_transformer_loading = 1.0
 
 # Size of the PV and EV systemy for each bus they're installed on
-pv_size = 0.030   # 30kW PV - change back to 10kW later
+pv_size = 0.027   # 27kW PV system
 ev_size = 0.011   # 11kW EV charger
 
 all_records = []
 hosting_capacities = []
 
-base_net = load_network()
+base_net = load_network(generation)
 candidate_buses = get_candidate_buses(base_net)
 
-n_monte_carlo = 100 # Number of Monte Carlo runs
+n_monte_carlo = 10 # Number of Monte Carlo runs
 tolerance = 1/len(candidate_buses) # Tolerance for bisection search depending on grid size - currently +-1 bus
 max_iterations = 20 # Maximum number of iterations for bisection search
 
@@ -236,37 +240,54 @@ hosting_capacity_results.to_csv("monte_carlo_hosting_capacity.csv", index=False)
 
 #%% Call analytic HC for comparison
 
-from blind_hc_analytic import calculate_analytic_hc, step_size
-PV_hc, EV_hc = calculate_analytic_hc(generation, step_size, max_voltage, min_voltage, max_line_loading, max_transformer_loading)
+from blind_hc_det import calculate_deterministic_hc, step_size
+PV_hc, EV_hc = calculate_deterministic_hc(generation,
+                                          step_size,
+                                          max_voltage,
+                                          min_voltage,
+                                          max_line_loading,
+                                          max_transformer_loading)
 
 #%% Plot type of violation in cake diagram
 
-x = results["reason"].value_counts()
-labels = results["reason"].value_counts().index
-colors = matplotlib.color_sequences['Set2']
+violation_counts = results["reason"].dropna().value_counts()
+labels = violation_counts.index
+
+violation_colors = {
+    "Voltage Violation": matplotlib.color_sequences["Set2"][0],
+    "Line Overloading": matplotlib.color_sequences["Set2"][1],
+    "Transformer Overloading": matplotlib.color_sequences["Set2"][2],
+    "No Convergence": matplotlib.color_sequences["Set2"][3],
+}
+
+colors = [violation_colors[label] for label in labels]
 
 fig, ax = plt.subplots()
-ax.pie(x, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
-plt.title('Violation Distribution')
-plt.savefig("violation_distr.png")
+ax.pie(
+    violation_counts,
+    labels=labels,
+    autopct="%1.1f%%",
+    colors=colors,
+    startangle=90
+)
+plt.title("Violation Distribution")
+plt.savefig("Plots/violation_distr.png")
 plt.show()
 
 # Boxplot of hosting capacities
 # Get previously calculated hosting capacity from other script
 if generation:
-    analytic_hc = np.round(PV_hc, decimals=3) # Example value from blind_hc_analytic.py
-    color = ""
+    deterministic_hc = np.round(PV_hc, decimals=3) # Example value from blind_hc_det.py
 else:
-    analytic_hc = np.round(EV_hc, decimals=3)
-    color = "blue"
-plt.figure(figsize=(5, 10))
+    deterministic_hc = np.round(EV_hc, decimals=3)
+plt.figure(figsize=(5.5, 10))
 sns.boxplot(data=hosting_capacity_results, y="hosting_capacity")
-plt.axhline(y=analytic_hc, color='r', linestyle='--', label=f'Deterministic HC ({analytic_hc} MW)')
+plt.axhline(y=deterministic_hc, color='r', linestyle='--', label=f'Deterministic HC ({deterministic_hc} MW)')
 #lim only needed for comparing iteration numbers, comment out for other sims
-plt.ylim(0.0, 0.1)
+#plt.ylim(0.0, 0.2)
 plt.ylabel("Hosting Capacity [MW]")
 plt.title("Hosting Capacity Distribution")
 plt.legend()
 plt.grid(True)
-plt.savefig("hc_distr.png")
+plt.savefig("Plots/hc_distr.png")
 plt.show()
