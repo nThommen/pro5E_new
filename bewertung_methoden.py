@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+# Disclaimer: Script AI-generated
+
 # Data from the table
 methods = [
     "Deterministic",

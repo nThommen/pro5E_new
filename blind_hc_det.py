@@ -9,6 +9,7 @@ from numpy.random import default_rng
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
+# Load network- and print-methods by Dirk Schmidt
 def load_network(generation):
     #net = pn.kb_extrem_vorstadtnetz_1()
     #net = pn.create_kerber_landnetz_kabel_1()

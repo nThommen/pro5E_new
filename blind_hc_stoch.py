@@ -7,6 +7,8 @@ import seaborn as sns
 import numpy as np
 from numpy.random import default_rng
 
+#Disclaimer: parts of script AI-generated
+
 
 #%% Functions
 # Load a desired network and set each bus-load to zero
