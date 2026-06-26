@@ -103,7 +103,7 @@ for pos_tuple, indices in unique_positions.items():
 # Create legend manually
 from matplotlib.lines import Line2D
 legend_elements = [
-    Line2D([0], [0], marker='o', color='w', label='Highlighted (Pareto-efficient & best value)',
+    Line2D([0], [0], marker='o', color='w', label='Highlighted (qualitative optimum & best value)',
            markerfacecolor='seagreen', markersize=10),
     Line2D([0], [0], marker='x', color='w', label='Other methods',
            markerfacecolor='darkred', markersize=10, markeredgecolor='darkred')
